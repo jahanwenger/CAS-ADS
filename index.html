@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kanonen-Simulator – Triff das Ziel</title>
+  <style>
+    :root { color-scheme: dark; --bg:#091322; --panel:#14243a; --line:#30475f; --text:#eff6ff; --muted:#a5b8ce; --accent:#56d4fd; --orange:#ffb35a; --green:#70edb1; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; color:var(--text); background:radial-gradient(ellipse at 25% 0%, #1d3853 0%,var(--bg) 60%); }
+    .wrap { max-width:1120px; margin:auto; padding:30px 20px 44px; }
+    header { display:flex; justify-content:space-between; flex-wrap:wrap; align-items:center; gap:16px; margin-bottom:20px; }
+    h1 { font-size:clamp(1.6rem,3vw,2.35rem); letter-spacing:-.035em; margin:0 0 6px; }
+    .subtitle { margin:0; color:var(--muted); }
+    .badge { border:1px solid #3d637d; border-radius:999px; padding:8px 12px; font-size:.82rem; color:#bceeff; background:#18334b; }
+    .stage { border:1px solid #38546e; border-radius:18px; overflow:hidden; background:#10243c; box-shadow:0 15px 40px #0005; }
+    canvas { display:block; width:100%; height:auto; aspect-ratio: 2.2 / 1; touch-action:manipulation; }
+    .controls { display:grid; grid-template-columns: 1fr 1fr auto; gap:18px; align-items:end; margin-top:18px; padding:22px; border:1px solid var(--line); border-radius:18px; background:var(--panel); }
+    .field label { display:flex; justify-content:space-between; font-weight:650; margin-bottom:10px; gap:12px; }
+    .field label span { color:var(--accent); font-variant-numeric:tabular-nums; }
+    input[type=range] { width:100%; margin:4px 0 1px; accent-color:var(--accent); cursor:pointer; }
+    .range-labels { display:flex; justify-content:space-between; margin-top:6px; color:var(--muted); font-size:.78rem; }
+    .buttons { display:flex; gap:10px; }
+    button { border:none; border-radius:11px; padding:13px 21px; cursor:pointer; font:inherit; font-weight:700; white-space:nowrap; transition: transform .15s,background .15s; }
+    button:active { transform:scale(.97); }
+    #fire { color:#081b27; background:var(--accent); }
+    #fire:hover { background:#95e7ff; }
+    #reset { color:var(--text); border:1px solid #496078; background:#20354c; }
+    #reset:hover { background:#30475e; }
+    button:disabled { opacity:.55; cursor:not-allowed; }
+    .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-top:14px; }
+    .stat { padding:15px 18px; border-radius:14px; border:1px solid var(--line); background:#14243aaa; }
+    .stat small { display:block; color:var(--muted); margin-bottom:5px; }
+    .stat strong { font-size:1.16rem; font-variant-numeric:tabular-nums; }
+    .message { margin-top:16px; padding:14px 18px; border:1px solid #415b73; border-radius:12px; background:#1b344a; min-height:52px; display:flex; align-items:center; line-height:1.45; }
+    .message.success { color:#b2fcd5; border-color:#36785d; background:#173a32; }
+    .message.fail { color:#ffce9c; border-color:#805b37; background:#423126; }
+    .hint { color:var(--muted); font-size:.87rem; margin:16px 3px 0; line-height:1.6; }
+    @media(max-width:750px) { .controls { grid-template-columns:1fr 1fr; } .buttons { grid-column:1/-1; } .buttons button { flex:1; } .stats { grid-template-columns:repeat(2,1fr); } canvas { aspect-ratio: 1.55 / 1; } }
+    @media(max-width:440px) { .controls { grid-template-columns:1fr; } .buttons { grid-column:auto; } .stats { gap:8px; } .stat { padding:12px; } }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header>
+      <div><h1>🎯 Kanonen-Simulator</h1><p class="subtitle">Wähle Geschwindigkeit und Winkel – und triff das Ziel!</p></div>
+      <span class="badge">Physik: Wurfparabel · g = 9,81 m/s²</span>
+    </header>
+
+    <section class="stage" aria-label="Spielfeld mit Kanone und Ziel"><canvas id="scene" width="1100" height="500">Dein Browser unterstützt Canvas nicht.</canvas></section>
+
+    <section class="controls" aria-label="Einstellungen für den Schuss">
+      <div class="field">
+        <label for="speed">Geschwindigkeit <span id="speedValue">50 m/s</span></label>
+        <input id="speed" type="range" min="10" max="100" step="1" value="50">
+        <div class="range-labels"><span>10 m/s</span><span>100 m/s</span></div>
+      </div>
+      <div class="field">
+        <label for="angle">Abschusswinkel <span id="angleValue">45°</span></label>
+        <input id="angle" type="range" min="5" max="85" step="1" value="45">
+        <div class="range-labels"><span>5°</span><span>85°</span></div>
+      </div>
+      <div class="buttons"><button id="fire" type="button">🔥 Schießen</button><button id="reset" type="button">↺ Neu</button></div>
+    </section>
+
+    <section class="stats" aria-label="Flugdaten">
+      <div class="stat"><small>Zielentfernung</small><strong id="targetDistance">180 m</strong></div>
+      <div class="stat"><small>Berechnete Reichweite</small><strong id="range">254,8 m</strong></div>
+      <div class="stat"><small>Maximale Flughöhe</small><strong id="height">63,7 m</strong></div>
+      <div class="stat"><small>Treffer / Schüsse</small><strong id="score">0 / 0</strong></div>
+    </section>
+    <div id="message" class="message" role="status" aria-live="polite">Stelle den Abschusswinkel und die Geschwindigkeit ein und drücke „Schießen“.</div>
+    <p class="hint">Mit „Neu“ erscheint die Zielscheibe jedes Mal an einer anderen, zufälligen Entfernung. Das Geschoss folgt einer idealisierten Wurfparabel ohne Luftwiderstand. Ein Treffer zählt, wenn die Kugel die Zielscheibe berührt. Tipp: Mit der Taste <strong>Leertaste</strong> kannst du ebenfalls schießen.</p>
+  </main>
+
+  <script>
+    (() => {
+      'use strict';
+      const canvas = document.querySelector('#scene');
+      const ctx = canvas.getContext('2d');
+      const speedInput = document.querySelector('#speed');
+      const angleInput = document.querySelector('#angle');
+      const fireButton = document.querySelector('#fire');
+      const resetButton = document.querySelector('#reset');
+      const message = document.querySelector('#message');
+      const g = 9.81;
+      let targetX = 180;
+      function newTargetPosition() {
+        // Ganzzahlige Distanz, mit mindestens 20 m Abstand zum vorherigen Ziel.
+        let next;
+        do { next = 70 + Math.floor(Math.random() * 211); }
+        while (Math.abs(next - targetX) < 20);
+        targetX = next;
+      }
+      const targetR = 9; // Radius in Metern (2D-Darstellung)
+      const projectileR = 2.5;
+      const W = canvas.width, H = canvas.height;
+      const worldWidth = 340, worldHeight = 130;
+      const groundY = H - 63;
+      const xScale = (W - 112) / worldWidth;
+      const yScale = (groundY - 48) / worldHeight;
+      const originX = 62;
+      const sx = x => originX + x * xScale;
+      const sy = y => groundY - y * yScale;
+      let shots = 0, hits = 0, shot = null, path = [], effect = null;
+      let lastFrame = 0;
+
+      function values() {
+        const v = Number(speedInput.value);
+        const angle = Number(angleInput.value) * Math.PI / 180;
+        return {v, angle, vx:v*Math.cos(angle), vy:v*Math.sin(angle)};
+      }
+      function pos(t, data) { return {x:data.vx*t, y:data.vy*t - .5*g*t*t}; }
+      function dataStats() {
+        const d=values();
+        document.querySelector('#speedValue').textContent = `${d.v} m/s`;
+        document.querySelector('#angleValue').textContent = `${angleInput.value}°`;
+        document.querySelector('#range').textContent = `${(d.v*d.v*Math.sin(2*d.angle)/g).toFixed(1).replace('.',',')} m`;
+        document.querySelector('#height').textContent = `${(d.vy*d.vy/(2*g)).toFixed(1).replace('.',',')} m`;
+        document.querySelector('#targetDistance').textContent = `${targetX} m`;
+        document.querySelector('#score').textContent = `${hits} / ${shots}`;
+      }
+      function setMessage(text, type='') { message.textContent=text; message.className=`message ${type}`; }
+      function line(x1,y1,x2,y2,color,width=1) {ctx.strokeStyle=color;ctx.lineWidth=width;ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();}
+      function circle(x,y,r,color) {ctx.fillStyle=color;ctx.beginPath();ctx.arc(x,y,r,0,2*Math.PI);ctx.fill();}
+
+      function drawBackground() {
+        const sky=ctx.createLinearGradient(0,0,0,groundY);sky.addColorStop(0,'#142c49');sky.addColorStop(1,'#2e5873');
+        ctx.fillStyle=sky;ctx.fillRect(0,0,W,H);
+        // Sterne / Lichtpunkte
+        for(let i=0;i<27;i++){const x=((i*193+87)%W),y=((i*71+24)%(groundY-90));circle(x,y,i%4===0?2:1,'#d9e9fa55');}
+        // Hügel im Hintergrund
+        ctx.fillStyle='#244a61';ctx.beginPath();ctx.moveTo(0,groundY);ctx.lineTo(0,groundY-56);ctx.bezierCurveTo(200,groundY-120,340,groundY-30,550,groundY-65);ctx.bezierCurveTo(780,groundY-145,960,groundY-50,W,groundY-90);ctx.lineTo(W,groundY);ctx.fill();
+        ctx.fillStyle='#183d47';ctx.fillRect(0,groundY,W,H-groundY);
+        ctx.fillStyle='#21515a';ctx.fillRect(0,groundY,W,9);
+        // Raster
+        ctx.font='13px system-ui'; ctx.textAlign='center';ctx.fillStyle='#c4d5e3b5';
+        for(let m=0;m<=worldWidth;m+=25){const x=sx(m);line(x,groundY+10,x,groundY+19,'#7592a68a');ctx.fillText(`${m} m`,x,groundY+39);}
+        ctx.save();ctx.setLineDash([5,8]);
+        for(let y=25;y<=100;y+=25){line(0,sy(y),W,sy(y),'#ffffff19');ctx.textAlign='left';ctx.fillText(`${y} m`,10,sy(y)-7);}
+        ctx.restore();
+      }
+      function drawTarget() {
+        const x=sx(targetX), y=sy(0);
+        // Ziel ist eine runde Scheibe, die auf dem Boden aufliegt
+        const cy=sy(targetR);
+        line(x,y,x,cy,'#d1e2e9',5);
+        circle(x,cy,targetR*yScale+4,'#102331');
+        circle(x,cy,targetR*yScale,'#f5f1e5');
+        circle(x,cy,targetR*yScale*.71,'#e65d65');
+        circle(x,cy,targetR*yScale*.43,'#f5f1e5');
+        circle(x,cy,targetR*yScale*.20,'#e65d65');
+        ctx.font='bold 16px system-ui';ctx.fillStyle='#e9f5fd';ctx.textAlign='center';ctx.fillText('ZIEL',x,cy-targetR*yScale-16);
+      }
+      function drawCannon() {
+        const d=values(),x=sx(0),y=sy(0)-5;
+        ctx.save();ctx.translate(x,y);ctx.rotate(-d.angle);
+        ctx.fillStyle='#596d7d';ctx.strokeStyle='#a8bac6';ctx.lineWidth=3;
+        ctx.beginPath();ctx.roundRect(-4,-13,65,26,7);ctx.fill();ctx.stroke();
+        ctx.fillStyle='#273d52';ctx.fillRect(54,-14,10,28);ctx.restore();
+        circle(x,y+8,24,'#1b2837');circle(x,y+8,14,'#587080');circle(x,y+8,5,'#1b2837');
+        ctx.fillStyle='#7f919c';ctx.beginPath();ctx.moveTo(x-28,y+23);ctx.lineTo(x+35,y+23);ctx.lineTo(x+22,y+32);ctx.lineTo(x-23,y+32);ctx.fill();
+      }
+      function drawPath() {
+        if (!path.length) return;
+        ctx.save();ctx.setLineDash([6,6]);ctx.strokeStyle='#ffe097c9';ctx.lineWidth=2.5;ctx.beginPath();
+        path.forEach((p,i)=>i?ctx.lineTo(sx(p.x),sy(p.y)):ctx.moveTo(sx(p.x),sy(p.y)));ctx.stroke();ctx.restore();
+      }
+      function render() {
+        drawBackground();drawTarget();drawPath();drawCannon();
+        if(shot){const p=pos(shot.t,shot.data);if(p.y>=-5){circle(sx(p.x)+3,sy(p.y)+4,projectileR*yScale+2,'#00000040');circle(sx(p.x),sy(p.y),projectileR*yScale,'#ffd175');circle(sx(p.x)-2,sy(p.y)-2,3,'#fff4c9');}}
+        if(effect){const px=sx(effect.x),py=sy(effect.y);const radius=(1-effect.remaining/0.55)*42+5;ctx.strokeStyle=effect.hit?'#80ffb0':'#ffc07a';ctx.lineWidth=5*effect.remaining/.55;ctx.beginPath();ctx.arc(px,py,radius,0,Math.PI*2);ctx.stroke();}
+      }
+      function segmentCircleCollision(a,b,c,r) {
+        const dx=b.x-a.x,dy=b.y-a.y, denom=dx*dx+dy*dy;
+        const u=denom?Math.max(0,Math.min(1,((c.x-a.x)*dx+(c.y-a.y)*dy)/denom)):0;
+        const p={x:a.x+dx*u,y:a.y+dy*u};return Math.hypot(p.x-c.x,p.y-c.y)<=r;
+      }
+      function shoot() {
+        if(shot)return;
+        const data=values(); shots++;dataStats();
+        shot={data,t:0,previous:{x:0,y:0}};path=[{x:0,y:0}];effect=null;
+        fireButton.disabled=true; speedInput.disabled=true;angleInput.disabled=true;
+        setMessage('Die Kanonenkugel fliegt …');
+      }
+      function finish(hit,p) {
+        if(hit) hits++;
+        dataStats();
+        effect={x:p.x,y:Math.max(0,p.y),hit,remaining:.55};
+        if(hit){setMessage('🎯 Volltreffer! Du hast das Ziel getroffen!','success');}
+        else {
+          const landing=shot.data.v*shot.data.v*Math.sin(2*shot.data.angle)/g;
+          const miss=landing-targetX;
+          setMessage(`Daneben! Die Kugel landet bei ${landing.toFixed(1).replace('.',',')} m – ${Math.abs(miss).toFixed(1).replace('.',',')} m ${miss<0?'vor':'hinter'} dem Ziel. Versuche es erneut!`,'fail');
+        }
+        shot=null;fireButton.disabled=false;speedInput.disabled=false;angleInput.disabled=false;
+      }
+      function frame(now) {
+        const dt=Math.min((now-lastFrame)/1000||0,.05);lastFrame=now;
+        if(shot) {
+          // Zeit etwas schneller ablaufen lassen, um die Animation kurz zu halten.
+          const prev=shot.previous;
+          shot.t+=dt*2.1;
+          const next=pos(shot.t,shot.data);
+          const target={x:targetX,y:targetR};
+          const hit=segmentCircleCollision(prev,next,target,targetR+projectileR);
+          if(hit){path.push({x:next.x,y:Math.max(0,next.y)});finish(true,next);}
+          else if(next.y<=0 && shot.t>0.05){
+            const landing=shot.data.v*shot.data.v*Math.sin(2*shot.data.angle)/g;
+            const p={x:landing,y:0};path.push(p);finish(false,p);
+          } else if(next.x>worldWidth+10){finish(false,next);}
+          else {shot.previous=next;path.push(next);}
+        }
+        if(effect){effect.remaining-=dt;if(effect.remaining<=0)effect=null;}
+        render();requestAnimationFrame(frame);
+      }
+      function reset(){shot=null;path=[];effect=null;shots=0;hits=0;speedInput.disabled=false;angleInput.disabled=false;fireButton.disabled=false;speedInput.value=50;angleInput.value=45;newTargetPosition();dataStats();setMessage(`Neues Ziel bei ${targetX} m! Wähle einen Winkel und eine Geschwindigkeit.`);}
+      speedInput.addEventListener('input',dataStats);angleInput.addEventListener('input',dataStats);
+      fireButton.addEventListener('click',shoot);resetButton.addEventListener('click',reset);
+      document.addEventListener('keydown',e=>{if(e.code==='Space' && !e.repeat && !['INPUT','BUTTON','TEXTAREA'].includes(document.activeElement.tagName)){e.preventDefault();shoot();}});
+      newTargetPosition();dataStats();requestAnimationFrame(frame);
+    })();
+  </script>
+</body>
+</html>

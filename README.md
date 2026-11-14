@@ -33,6 +33,3 @@ TBD
 *   **Program:** Certificate of Advanced Studies (CAS) in Applied Data Science
 *   **Official Page:** [University of Bern - CAS ADS](https://www.unibe.ch/continuing_education_programs/cas_in_applied_data_science/index_eng.html)
 
-## License
-
-TBD
